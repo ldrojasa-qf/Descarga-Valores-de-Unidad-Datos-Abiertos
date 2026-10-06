@@ -1,0 +1,29 @@
+# Configuración del pipeline de peers AFP
+api:
+  version: soda2          # soda2 (sin token obligatorio) | soda3 (requiere SOCRATA_APP_TOKEN)
+  page_size: 50000
+
+datasets:
+  valor_fondo: hds9-4524  # Valoración de los Tipos de Fondos de Pensiones Obligatorias y Cesantías
+  valor_unidad: uawh-cjvi # Valor de unidad de los fondos
+
+# Filtro del valor del fondo al cierre en pesos:
+#   codigo_columna = 2   -> "VALOR EN PESOS $"
+#   cod_renglon    = 110 -> "VALOR DEL PORTAFOLIO AL CIERRE DEL DÍA" (incluye rendimientos del día;
+#                           el renglón 105 es el cierre ANTES de abonar rendimientos)
+valor_fondo_filtro:
+  codigo_columna: "2"
+  cod_renglon: "110"
+
+fecha_inicio: "2015-01-01"   # descarga histórica desde esta fecha
+redescarga_dias: 45          # en actualizaciones incrementales, re-baja los últimos N días (correcciones SFC)
+
+peers:
+  afp_foco: 3                # codigo_entidad de la AFP a comparar (3 = Porvenir)
+  # Peso: valor del fondo del día anterior (t-1), el AUM sobre el que se generó el rendimiento de t.
+  # Poner 0 para ponderar con el valor de cierre del mismo día t.
+  lag_peso: 1
+  # Portafolios a excluir del cálculo (codigo_patrimonio), p.ej. fondos alternativos:
+  excluir_patrimonios: []
+
+data_dir: data

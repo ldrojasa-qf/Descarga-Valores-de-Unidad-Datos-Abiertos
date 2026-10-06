@@ -1,0 +1,37 @@
+name: Actualizar datos
+
+# Corre de lunes a viernes 8:00 a.m. Bogotá (13:00 UTC) o manualmente.
+# Las salidas quedan como artifact del workflow (no se commitean al repo).
+on:
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Re-descargar todo el histórico"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 13 * * 1-5"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Restaurar datos previos
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: afp-data-${{ github.run_id }}
+          restore-keys: afp-data-
+      - run: afp-peers run ${{ inputs.full && '--full' || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: afp-peers-${{ github.run_number }}
+          path: data/
+          retention-days: 30
