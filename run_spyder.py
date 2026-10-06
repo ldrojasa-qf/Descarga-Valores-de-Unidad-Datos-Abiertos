@@ -17,8 +17,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)                      # para que config.yaml y data/ se resuelvan bien
-if str(ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(ROOT / "src"))
+
+# Spyder mantiene módulos importados entre corridas: si antes corriste otra copia del proyecto
+# (p.ej. "afp-peers 2"), se seguiría usando ese código. Se limpia el cache y el path.
+for _m in [m for m in sys.modules if m == "afp_peers" or m.startswith("afp_peers.")]:
+    del sys.modules[_m]
+sys.path[:] = [p for p in sys.path if not (Path(p).name == "src" and (Path(p) / "afp_peers").is_dir())]
+sys.path.insert(0, str(ROOT / "src"))
 
 import pandas as pd
 
@@ -26,6 +31,8 @@ from afp_peers.config import Config
 from afp_peers.download import download_valor_fondo, download_valor_unidad
 from afp_peers.peers import compute_peers, coverage_report, to_index
 from afp_peers.soda import SodaClient
+import afp_peers
+print(f"Código cargado desde: {Path(afp_peers.__file__).parent}")
 
 # Spyder deja handlers viejos entre corridas; force=True los reemplaza
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
