@@ -7,13 +7,14 @@ datasets:
   valor_fondo: hds9-4524  # Valoración de los Tipos de Fondos de Pensiones Obligatorias y Cesantías
   valor_unidad: uawh-cjvi # Valor de unidad de los fondos
 
-# Filtro del valor del fondo al cierre en pesos:
-#   codigo_columna = 2   -> "VALOR EN PESOS $"
-#   cod_renglon    = 110 -> "VALOR DEL PORTAFOLIO AL CIERRE DEL DÍA" (incluye rendimientos del día;
-#                           el renglón 105 es el cierre ANTES de abonar rendimientos)
+# Filtro del valor del fondo al cierre en pesos, POR NOMBRE (los códigos de renglón cambian
+# según el tipo de fondo, p.ej. Retiro Programado no usa el 110).
+# Se compara con UPPER(...) LIKE '<texto>%' para tolerar espacios/truncamientos.
+# El nombre "VALOR DEL PORTAFOLIO AL CIERRE DEL" aparece en dos renglones (antes y después de abonar
+# rendimientos, p.ej. 105 y 110): por cada fecha/AFP/portafolio se toma el de código MAYOR = cierre final.
 valor_fondo_filtro:
-  codigo_columna: "2"
-  cod_renglon: "110"
+  nombre_columna: "VALOR EN PESOS"
+  nombre_renglon: "VALOR DEL PORTAFOLIO AL CIERRE"
 
 fecha_inicio: "2015-01-01"   # descarga histórica desde esta fecha
 redescarga_dias: 45          # en actualizaciones incrementales, re-baja los últimos N días (correcciones SFC)

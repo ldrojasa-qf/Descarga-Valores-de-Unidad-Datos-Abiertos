@@ -12,7 +12,8 @@ class Config:
     api_version: str = "soda2"
     page_size: int = 50_000
     datasets: dict = field(default_factory=lambda: {"valor_fondo": "hds9-4524", "valor_unidad": "uawh-cjvi"})
-    valor_fondo_filtro: dict = field(default_factory=lambda: {"codigo_columna": "2", "cod_renglon": "110"})
+    valor_fondo_filtro: dict = field(default_factory=lambda: {
+        "nombre_columna": "VALOR EN PESOS", "nombre_renglon": "VALOR DEL PORTAFOLIO AL CIERRE"})
     fecha_inicio: str = "2015-01-01"
     redescarga_dias: int = 45
     afp_foco: int = 3

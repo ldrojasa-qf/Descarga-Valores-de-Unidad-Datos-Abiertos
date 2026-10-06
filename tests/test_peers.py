@@ -70,6 +70,20 @@ def test_indice_base_100(data):
     assert idx.loc[1000, "idx_peers"] == pytest.approx(103.5)
 
 
+def test_cierre_por_nombre_toma_renglon_mayor():
+    def r(p, ren, v):
+        return {"fecha_corte": "2026-01-02T00:00:00.000", "codigo_entidad": "3", "nombre_entidad": "Porvenir",
+                "tipo_patrimonio": "1", "nombre_tipo_patrimonio": "x", "codigo_patrimonio": str(p),
+                "nombre_patrimonio": "x", "cod_unid_capt": "3", "cod_renglon": str(ren),
+                "nombre_renglon": "VALOR DEL PORTAFOLIO AL CIERRE DEL", "sum_valor": str(v)}
+    vf = normalize_valor_fondo(pd.DataFrame([
+        r(1, 105, 100.0), r(1, 110, 101.0),   # cesantías: antes / después de rendimientos
+        r(7000, 95, 50.0),                     # retiro programado con otro número de renglón
+    ])).set_index("codigo_patrimonio")
+    assert vf.loc[1, "valor_fondo"] == 101.0 and vf.loc[1, "cod_renglon"] == 110
+    assert vf.loc[7000, "valor_fondo"] == 50.0
+
+
 def test_normalizacion_api():
     raw_vf = pd.DataFrame([{"fecha_corte": "2015-01-01T00:00:00.000", "codigo_entidad": "10",
                             "nombre_entidad": '"Colfondos S.A." Y "Colfondos"', "tipo_patrimonio": "5",

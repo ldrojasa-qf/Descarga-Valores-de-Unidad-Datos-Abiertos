@@ -11,10 +11,10 @@ Descarga los datos abiertos de la Superintendencia Financiera (datos.gov.co) de 
 
 **Filtro de valor de fondo.** `hds9-4524` trae ~1.9M filas con todos los renglones del formato (aportes, retiros, traslados, en unidades y en pesos). Solo se descarga, filtrado del lado del servidor:
 
-- `codigo_columna = 2` → *VALOR EN PESOS $*
-- `cod_renglon = 110` → *VALOR DEL PORTAFOLIO AL CIERRE DEL DÍA*, **después** de abonar rendimientos.
+- `NOMBRE_COLUMNA` empieza por *VALOR EN PESOS*
+- `NOMBRE_RENGLON` empieza por *VALOR DEL PORTAFOLIO AL CIERRE*
 
-> El renglón 105 también se llama "valor al cierre", pero es antes de rendimientos: 110 = 105 + renglón 45 (rendimientos abonados en el día). Ej. Colfondos Cesantías LP, 01-ene-2015: 738.555.912.479,47 + 7.577.501,33 = 738.563.489.980,80.
+Se filtra por **nombre** y no por código porque el número de renglón cambia según el tipo de fondo (Retiro Programado no usa el 110). Ese nombre aparece en dos renglones —cierre antes y después de abonar rendimientos (en cesantías/pensiones, 105 y 110: 110 = 105 + renglón 45)— así que por cada fecha/AFP/portafolio se toma el de **código mayor**, que es el cierre final. El renglón usado queda en `valor_fondo.parquet` (`cod_renglon`) y en `cobertura.csv` (`renglon_cierre`) para auditarlo.
 
 Los `codigo_patrimonio` coinciden entre ambos datasets: `1` Cesantías LP, `2` Cesantías CP, `1000` Moderado, `5000` Conservador, `6000` Mayor Riesgo, `7000` Retiro Programado. `codigo_entidad`: 2 Protección, 3 Porvenir, 9 Skandia, 10 Colfondos.
 

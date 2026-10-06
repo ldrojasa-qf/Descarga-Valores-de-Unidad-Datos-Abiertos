@@ -41,15 +41,19 @@ def _merge_incremental(path: Path, new: pd.DataFrame, since: str) -> pd.DataFram
 # --------------------------------------------------------------------- fondo
 def download_valor_fondo(client: SodaClient, cfg: Config, full: bool = False) -> pd.DataFrame:
     path = cfg.data_dir / "valor_fondo.parquet"
+    if path.exists() and "cod_renglon" not in pd.read_parquet(path).columns:
+        log.warning("valor_fondo.parquet es de una versión anterior (filtro por código 110): se re-descarga completo")
+        full = True
     if full and path.exists():
         path.unlink()
     since = _start_date(path, cfg)
     f = cfg.valor_fondo_filtro
-    # codigo_columna y cod_renglon son numéricos en el dataset -> sin comillas
-    where = (f"codigo_columna = {f['codigo_columna']} AND cod_renglon = {f['cod_renglon']} "
+    col = f["nombre_columna"].upper().replace("'", "''")
+    ren = f["nombre_renglon"].upper().replace("'", "''")
+    where = (f"upper(nombre_columna) like '{col}%' AND upper(nombre_renglon) like '{ren}%' "
              f"AND fecha_corte >= '{since}T00:00:00'")
     select = ("fecha_corte, codigo_entidad, nombre_entidad, tipo_patrimonio, nombre_tipo_patrimonio, "
-              "codigo_patrimonio, nombre_patrimonio, cod_unid_capt, sum_valor")
+              "codigo_patrimonio, nombre_patrimonio, cod_unid_capt, cod_renglon, nombre_renglon, sum_valor")
     log.info("Descargando valor de fondo desde %s", since)
     rows = client.fetch_all(cfg.datasets["valor_fondo"], select=select, where=where,
                             order="fecha_corte, codigo_entidad, codigo_patrimonio, cod_unid_capt")
@@ -58,22 +62,32 @@ def download_valor_fondo(client: SodaClient, cfg: Config, full: bool = False) ->
 
 
 def normalize_valor_fondo(df: pd.DataFrame) -> pd.DataFrame:
+    """Deja una fila por (fecha, entidad, portafolio).
+
+    El filtro por nombre trae dos renglones "AL CIERRE" (antes y después de abonar rendimientos);
+    se conserva el de cod_renglon mayor, que es el cierre final. cod_renglon queda en la salida
+    para auditar qué renglón se usó en cada portafolio.
+    """
     cols = ["fecha", "codigo_entidad", "nombre_entidad", "tipo_patrimonio", "nombre_tipo_patrimonio",
-            "codigo_patrimonio", "nombre_patrimonio", "valor_fondo"]
+            "codigo_patrimonio", "nombre_patrimonio", "cod_renglon", "valor_fondo"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     df = df.rename(columns={"fecha_corte": "fecha", "sum_valor": "valor_fondo"})
+    if "cod_renglon" not in df:
+        df["cod_renglon"] = -1
     df["fecha"] = pd.to_datetime(df["fecha"]).dt.normalize()
-    for c in ["codigo_entidad", "tipo_patrimonio", "codigo_patrimonio"]:
+    for c in ["codigo_entidad", "tipo_patrimonio", "codigo_patrimonio", "cod_renglon"]:
         df[c] = pd.to_numeric(df[c]).astype("int64")
     df["valor_fondo"] = pd.to_numeric(df["valor_fondo"], errors="coerce")
     for c in ["nombre_entidad", "nombre_tipo_patrimonio", "nombre_patrimonio"]:
         df[c] = _clean_name(df[c])
-    dup = df.duplicated(KEYS, keep=False)
-    if dup.any():
-        log.warning("%d filas duplicadas (fecha, entidad, patrimonio) en valor de fondo; se conserva la última",
-                    int(dup.sum()))
-    return df.drop_duplicates(KEYS, keep="last")[cols]
+    df = df.dropna(subset=["valor_fondo"]).sort_values(KEYS + ["cod_renglon"])
+    out = df.drop_duplicates(KEYS, keep="last")[cols]
+
+    usados = out.groupby("codigo_patrimonio")["cod_renglon"].unique()
+    for p, r in usados.items():
+        log.info("valor_fondo patrimonio %s: renglón(es) de cierre usados %s", p, sorted(r.tolist()))
+    return out
 
 
 # -------------------------------------------------------------------- unidad

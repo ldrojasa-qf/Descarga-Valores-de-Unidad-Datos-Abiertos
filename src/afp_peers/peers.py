@@ -112,7 +112,14 @@ def coverage_report(vu: pd.DataFrame, vf: pd.DataFrame) -> pd.DataFrame:
     """Resumen por serie: rango de fechas en VU y VF, para detectar huecos o códigos que no cruzan."""
     a = vu.groupby(SERIE).agg(nombre=("nombre_entidad", "last"), vu_desde=("fecha", "min"),
                               vu_hasta=("fecha", "max"), vu_obs=("fecha", "size"))
-    b = vf.groupby(SERIE).agg(vf_desde=("fecha", "min"), vf_hasta=("fecha", "max"), vf_obs=("fecha", "size"))
+    agg = dict(vf_desde=("fecha", "min"), vf_hasta=("fecha", "max"), vf_obs=("fecha", "size"))
+    if "cod_renglon" in vf:
+        agg["renglon_cierre"] = ("cod_renglon", lambda s: ",".join(map(str, sorted(s.unique()))))
+    b = vf.groupby(SERIE).agg(**agg)
     out = a.join(b, how="outer").reset_index()
     out["portafolio"] = out["codigo_patrimonio"].map(PORTAFOLIOS)
+    sin_vf = out[out["vf_obs"].isna()]
+    for _, r in sin_vf.iterrows():
+        log.warning("Sin valor de fondo: entidad %s, %s -> no entra en peers/industria",
+                    r["codigo_entidad"], r["portafolio"] or r["codigo_patrimonio"])
     return out
