@@ -61,6 +61,12 @@ afp-peers peers          # solo recalcula con los parquet locales
 
 La primera corrida baja todo desde `fecha_inicio`; las siguientes solo re-descargan los últimos `redescarga_dias` (por defecto 45) para recoger correcciones retroactivas de la SFC.
 
+### Desde Spyder
+
+1. En la consola de Spyder, una sola vez: `%pip install pandas pyarrow requests pyyaml openpyxl`
+2. Abre `run_spyder.py`, ajusta los parámetros de la celda 0 (`APP_TOKEN`, `FULL`, `DESCARGAR`).
+3. F5 para correr todo, o Ctrl+Enter celda por celda. `vf`, `vu`, `peers`, `idx`, `cov` y `resumen` quedan en el Variable Explorer; las gráficas en Plots; el Excel en `data/peers_afp.xlsx`.
+
 ## Salidas (`data/`)
 
 | Archivo | Contenido |
