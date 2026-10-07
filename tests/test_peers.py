@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from afp_peers.download import normalize_valor_fondo, normalize_valor_unidad
-from afp_peers.peers import compute_peers, to_index
+from afp_peers.peers import compute_peers, resolve_afp, to_index
 
 
 def _vu(rows):
@@ -67,21 +67,42 @@ def test_peer_sin_peso_se_excluye():
 
 def test_indice_base_100(data):
     idx = to_index(compute_peers(*data)).set_index("codigo_patrimonio")
-    assert idx.loc[1000, "idx_peers"] == pytest.approx(103.5)
+    # por defecto lag_peso=0: pesos del cierre del mismo día (9_999 y 312)
+    esperado = (0.02 * 9_999 + 0.04 * 312) / (9_999 + 312)
+    assert idx.loc[1000, "idx_peers"] == pytest.approx(100 * (1 + esperado))
 
 
 def test_cierre_por_nombre_toma_renglon_mayor():
-    def r(p, ren, v):
+    def r_ces(p, ren, v):
         return {"fecha_corte": "2026-01-02T00:00:00.000", "codigo_entidad": "3", "nombre_entidad": "Porvenir",
                 "tipo_patrimonio": "1", "nombre_tipo_patrimonio": "x", "codigo_patrimonio": str(p),
                 "nombre_patrimonio": "x", "cod_unid_capt": "3", "cod_renglon": str(ren),
                 "nombre_renglon": "VALOR DEL PORTAFOLIO AL CIERRE DEL", "sum_valor": str(v)}
+
+    def r_pen(p, ren, v):
+        # Pensiones: nombre_renglon es "VALOR DEL FONDO AL CIERRE DEL DÍA -..." (igual para 300 y 305)
+        return {"fecha_corte": "2026-01-02T00:00:00.000", "codigo_entidad": "3", "nombre_entidad": "Porvenir",
+                "tipo_patrimonio": "3", "nombre_tipo_patrimonio": "x", "codigo_patrimonio": str(p),
+                "nombre_patrimonio": "x", "cod_unid_capt": "4", "cod_renglon": str(ren),
+                "nombre_renglon": "VALOR DEL FONDO AL CIERRE DEL DÍA - ANTES DE ABONO" if ren == 300
+                else "VALOR DEL FONDO AL CIERRE DEL DÍA - DESPUES DE ABONO",
+                "sum_valor": str(v)}
+
     vf = normalize_valor_fondo(pd.DataFrame([
-        r(1, 105, 100.0), r(1, 110, 101.0),   # cesantías: antes / después de rendimientos
-        r(7000, 95, 50.0),                     # retiro programado con otro número de renglón
+        r_ces(1, 105, 100.0), r_ces(1, 110, 101.0),    # cesantías LP: 110 = después de rendimientos
+        r_pen(1000, 300, 500.0), r_pen(1000, 305, 499.0),  # pensiones: 305 = después (ret negativo)
+        r_pen(7000, 300, 80.0), r_pen(7000, 305, 80.5),    # retiro programado: 305 = después (ret positivo)
     ])).set_index("codigo_patrimonio")
-    assert vf.loc[1, "valor_fondo"] == 101.0 and vf.loc[1, "cod_renglon"] == 110
-    assert vf.loc[7000, "valor_fondo"] == 50.0
+
+    # cesantías: debe quedar el renglón 110
+    assert vf.loc[1, "valor_fondo"] == 101.0
+    assert vf.loc[1, "cod_renglon"] == 110
+    # pensiones moderado: debe quedar el renglón 305 (aunque su valor sea menor que 300)
+    assert vf.loc[1000, "valor_fondo"] == 499.0
+    assert vf.loc[1000, "cod_renglon"] == 305
+    # retiro programado: renglón 305
+    assert vf.loc[7000, "valor_fondo"] == 80.5
+    assert vf.loc[7000, "cod_renglon"] == 305
 
 
 def test_normalizacion_api():
@@ -99,3 +120,18 @@ def test_normalizacion_api():
     vu = normalize_valor_unidad(raw_vu)
     assert vu.loc[0, "codigo_patrimonio"] == 1000 and vu.loc[0, "nombre_entidad"] == "Porvenir"
     assert np.issubdtype(vu["fecha"].dtype, np.datetime64)
+
+
+def test_resolve_afp_por_nombre_o_codigo():
+    assert resolve_afp(3) == resolve_afp("3") == resolve_afp("porvenir") == 3
+    assert resolve_afp("Protección") == resolve_afp("PRO") == 2
+    assert resolve_afp(" colfondos ") == 10 and resolve_afp("Skandia") == resolve_afp("OLD") == 9
+    with pytest.raises(ValueError):
+        resolve_afp("otra")
+
+
+def test_cambiar_foco_cambia_peers(data):
+    # foco = peer A (2): sus peers son Porvenir (+1%, VF 606) y peer B (+4%, VF 312)
+    m = compute_peers(*data, afp_foco=2).set_index("codigo_patrimonio").loc[1000]
+    assert m["ret_foco"] == pytest.approx(0.02)
+    assert m["ret_peers"] == pytest.approx((0.01 * 606 + 0.04 * 312) / (606 + 312))

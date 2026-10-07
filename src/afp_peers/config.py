@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from .peers import AFP_LABELS, AFP_NOMBRES, resolve_afp
+
 
 @dataclass
 class Config:
@@ -17,10 +19,19 @@ class Config:
     fecha_inicio: str = "2015-01-01"
     redescarga_dias: int = 45
     afp_foco: int = 3
-    lag_peso: int = 1
+    lag_peso: int = 0
     excluir_patrimonios: list = field(default_factory=list)
     data_dir: Path = Path("data")
     app_token: str | None = None
+
+    @property
+    def afp_foco_nombre(self) -> str:
+        return AFP_NOMBRES.get(self.afp_foco, str(self.afp_foco))
+
+    @property
+    def bases_path(self) -> Path:
+        """VU base de PEERS/INDUSTRIA: un archivo por AFP foco (los peers cambian con el foco)."""
+        return self.data_dir / f"base_vu_{AFP_LABELS.get(self.afp_foco, self.afp_foco)}.yaml"
 
     @classmethod
     def load(cls, path: str | Path = "config.yaml") -> "Config":
@@ -34,7 +45,7 @@ class Config:
             valor_fondo_filtro=raw.get("valor_fondo_filtro", base.valor_fondo_filtro),
             fecha_inicio=str(raw.get("fecha_inicio", base.fecha_inicio)),
             redescarga_dias=int(raw.get("redescarga_dias", base.redescarga_dias)),
-            afp_foco=int(peers.get("afp_foco", base.afp_foco)),
+            afp_foco=resolve_afp(peers.get("afp_foco", base.afp_foco)),
             lag_peso=int(peers.get("lag_peso", base.lag_peso)),
             excluir_patrimonios=list(peers.get("excluir_patrimonios") or []),
             data_dir=Path(raw.get("data_dir", "data")),

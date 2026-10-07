@@ -49,14 +49,21 @@ def download_valor_fondo(client: SodaClient, cfg: Config, full: bool = False) ->
     since = _start_date(path, cfg)
     f = cfg.valor_fondo_filtro
     col = f["nombre_columna"].upper().replace("'", "''")
-    ren = f["nombre_renglon"].upper().replace("'", "''")
-    where = (f"upper(nombre_columna) like '{col}%' AND upper(nombre_renglon) like '{ren}%' "
+    ren_raw = f["nombre_renglon"]
+    if isinstance(ren_raw, str):
+        ren_raw = [ren_raw]
+    ren_clauses = " OR ".join(
+        f"upper(nombre_renglon) like '{r.upper().replace(chr(39), chr(39)*2)}%'"
+        for r in ren_raw
+    )
+    where = (f"upper(nombre_columna) like '{col}%' "
+             f"AND ({ren_clauses}) "
              f"AND fecha_corte >= '{since}T00:00:00'")
     select = ("fecha_corte, codigo_entidad, nombre_entidad, tipo_patrimonio, nombre_tipo_patrimonio, "
               "codigo_patrimonio, nombre_patrimonio, cod_unid_capt, cod_renglon, nombre_renglon, sum_valor")
     log.info("Descargando valor de fondo desde %s", since)
     rows = client.fetch_all(cfg.datasets["valor_fondo"], select=select, where=where,
-                            order="fecha_corte, codigo_entidad, codigo_patrimonio, cod_unid_capt")
+                            order="fecha_corte, codigo_entidad, codigo_patrimonio, cod_unid_capt, :id")
     df = normalize_valor_fondo(pd.DataFrame(rows))
     return _merge_incremental(path, df, since)
 
@@ -116,3 +123,23 @@ def normalize_valor_unidad(df: pd.DataFrame) -> pd.DataFrame:
     for c in ["nombre_entidad", "nombre_fondo"]:
         df[c] = _clean_name(df[c])
     return df.drop_duplicates(KEYS, keep="last")[cols]
+
+
+# ----------------------------------------------------------------- cobertura
+def check_vf_coverage(vf: pd.DataFrame, vu: pd.DataFrame) -> None:
+    """Avisa fuerte si algún par (entidad, patrimonio) de valor_unidad no tiene ninguna fila en valor_fondo."""
+    pares_vu = set(zip(vu["codigo_entidad"], vu["codigo_patrimonio"]))
+    pares_vf = set(zip(vf["codigo_entidad"], vf["codigo_patrimonio"]))
+    faltantes = pares_vu - pares_vf
+    if faltantes:
+        log.warning("=" * 60)
+        log.warning("ADVERTENCIA: %d par(es) (entidad, patrimonio) presentes en valor_unidad "
+                    "pero SIN NINGUNA fila en valor_fondo. Esos portafolios quedarán fuera de "
+                    "peers/industria TODOS los días.", len(faltantes))
+        for entidad, patrimonio in sorted(faltantes):
+            nombre = vu.loc[(vu["codigo_entidad"] == entidad) & (vu["codigo_patrimonio"] == patrimonio),
+                            "nombre_entidad"].iloc[0] if len(vu) else "?"
+            log.warning("  FALTA VF: entidad=%s (%s), patrimonio=%s", entidad, nombre, patrimonio)
+        log.warning("=" * 60)
+    else:
+        log.info("Cobertura VF OK: todos los pares (entidad, patrimonio) de VU tienen valor de fondo.")

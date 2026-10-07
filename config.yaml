@@ -14,16 +14,20 @@ datasets:
 # rendimientos, p.ej. 105 y 110): por cada fecha/AFP/portafolio se toma el de código MAYOR = cierre final.
 valor_fondo_filtro:
   nombre_columna: "VALOR EN PESOS"
-  nombre_renglon: "VALOR DEL PORTAFOLIO AL CIERRE"
+  nombre_renglon:
+    - "VALOR DEL PORTAFOLIO AL CIERRE"   # cesantías LP/CP (cod 105 y 110)
+    - "VALOR DEL FONDO AL CIERRE DEL"    # pensiones Moderado/Conservador/Mayor Riesgo/Retiro Programado (cod 300 y 305)
 
 fecha_inicio: "2015-01-01"   # descarga histórica desde esta fecha
 redescarga_dias: 45          # en actualizaciones incrementales, re-baja los últimos N días (correcciones SFC)
 
 peers:
-  afp_foco: 3                # codigo_entidad de la AFP a comparar (3 = Porvenir)
-  # Peso: valor del fondo del día anterior (t-1), el AUM sobre el que se generó el rendimiento de t.
-  # Poner 0 para ponderar con el valor de cierre del mismo día t.
-  lag_peso: 1
+  # Quién eres: la AFP que se compara contra sus peers (las demás). Nombre o codigo_entidad:
+  # Porvenir (3), Proteccion (2), Colfondos (10), Skandia (9).
+  afp_foco: Porvenir
+  # Peso: valor del fondo al cierre del mismo día t.
+  # Poner 1 para ponderar con el valor del día anterior (t-1), el AUM sobre el que se generó el rendimiento de t.
+  lag_peso: 0
   # Portafolios a excluir del cálculo (codigo_patrimonio), p.ej. fondos alternativos:
   excluir_patrimonios: []
 

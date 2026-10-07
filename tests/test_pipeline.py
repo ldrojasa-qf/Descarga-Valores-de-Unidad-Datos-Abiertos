@@ -1,8 +1,11 @@
+import logging
+
 import pandas as pd
+import pytest
 
 from afp_peers.cli import main
 from afp_peers.config import Config
-from afp_peers.download import download_valor_fondo, download_valor_unidad
+from afp_peers.download import check_vf_coverage, download_valor_fondo, download_valor_unidad
 from afp_peers.soda import SodaClient
 
 
@@ -33,6 +36,77 @@ def _vf(f, e, p, v):
 def _vu(f, e, p, v):
     return {"fecha": f + "T00:00:00.000", "codigo_entidad": str(e), "nombre_entidad": '"x"',
             "codigo_patrimonio": str(p), "nombre_fondo": "x", "valor_unidad": str(v)}
+
+
+def test_where_incluye_ambos_patrones_renglon(tmp_path):
+    """El WHERE generado contiene OR con los dos patrones (cesantías y pensiones)."""
+    cfg = Config(data_dir=tmp_path, fecha_inicio="2026-01-01",
+                 valor_fondo_filtro={
+                     "nombre_columna": "VALOR EN PESOS",
+                     "nombre_renglon": ["VALOR DEL PORTAFOLIO AL CIERRE", "VALOR DEL FONDO AL CIERRE DEL"],
+                 })
+    captured_where = []
+
+    class WhereCapture(SodaClient):
+        def _request(self, method, url, **kw):
+            if "hds9-4524" in url:
+                captured_where.append(kw["params"]["$where"])
+            return []
+
+    download_valor_fondo(WhereCapture(), cfg)
+    assert captured_where, "No se realizó ninguna petición al dataset de valor_fondo"
+    w = captured_where[0]
+    assert "VALOR DEL PORTAFOLIO AL CIERRE%" in w
+    assert "VALOR DEL FONDO AL CIERRE DEL%" in w
+    assert " OR " in w
+
+
+def test_order_incluye_id(tmp_path):
+    """El $order siempre termina con :id para garantizar paginación estable."""
+    cfg = Config(data_dir=tmp_path, fecha_inicio="2026-01-01")
+    captured_order = []
+
+    class OrderCapture(SodaClient):
+        def _request(self, method, url, **kw):
+            if "hds9-4524" in url:
+                captured_order.append(kw["params"].get("$order", ""))
+            return []
+
+    download_valor_fondo(OrderCapture(), cfg)
+    assert captured_order and captured_order[0].endswith(":id")
+
+
+def test_check_vf_coverage_avisa(caplog):
+    """check_vf_coverage emite WARNING cuando un par (entidad, patrimonio) de VU no está en VF."""
+    vu = pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-01-02"), "codigo_entidad": 3, "codigo_patrimonio": 1000,
+         "nombre_entidad": "Porvenir", "nombre_fondo": "x", "valor_unidad": 100.0},
+        {"fecha": pd.Timestamp("2026-01-02"), "codigo_entidad": 2, "codigo_patrimonio": 1000,
+         "nombre_entidad": "Proteccion", "nombre_fondo": "x", "valor_unidad": 100.0},
+    ])
+    vf = pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-01-01"), "codigo_entidad": 3, "codigo_patrimonio": 1000,
+         "nombre_entidad": "Porvenir", "valor_fondo": 1000.0, "cod_renglon": 305},
+    ])
+    with caplog.at_level(logging.WARNING, logger="afp_peers.download"):
+        check_vf_coverage(vf, vu)
+    assert any("FALTA VF" in m for m in caplog.messages)
+    assert any("2" in m and "1000" in m for m in caplog.messages)  # entidad 2, patrimonio 1000
+
+
+def test_check_vf_coverage_ok_sin_warnings(caplog):
+    """check_vf_coverage no emite warnings cuando todos los pares están cubiertos."""
+    vu = pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-01-02"), "codigo_entidad": 3, "codigo_patrimonio": 1000,
+         "nombre_entidad": "Porvenir", "nombre_fondo": "x", "valor_unidad": 100.0},
+    ])
+    vf = pd.DataFrame([
+        {"fecha": pd.Timestamp("2026-01-01"), "codigo_entidad": 3, "codigo_patrimonio": 1000,
+         "nombre_entidad": "Porvenir", "valor_fondo": 1000.0, "cod_renglon": 305},
+    ])
+    with caplog.at_level(logging.WARNING, logger="afp_peers.download"):
+        check_vf_coverage(vf, vu)
+    assert not any("FALTA VF" in m for m in caplog.messages)
 
 
 def test_soda_paginacion_y_soda3_body():

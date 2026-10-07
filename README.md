@@ -24,13 +24,13 @@ Para cada portafolio *p* y fecha *t*:
 
 ```
 r(i,t)          = VU(i,t) / VU(i,t-1) - 1
-w(i,t)          = VF(i, t-1)                       # lag_peso = 1 (por defecto)
-r_peers(p,t)    = Σ_{i ≠ Porvenir} w·r / Σ_{i ≠ Porvenir} w
+w(i,t)          = VF(i, t)                         # lag_peso = 0 (por defecto)
+r_peers(p,t)    = Σ_{i ≠ foco} w·r / Σ_{i ≠ foco} w
 r_industria(p,t)= Σ_{i}            w·r / Σ_{i}            w
 ```
 
 - La ponderación es **por portafolio**, no por el AUM total de cada AFP.
-- Se pondera con el valor de fondo de **t-1** (el AUM que generó el rendimiento de *t*). Con `lag_peso: 0` se usa el cierre de *t*, que ya incluye el rendimiento del día y sesga levemente el peso hacia quien rindió más.
+- Se pondera con el valor de fondo al **cierre del mismo día *t***. Con `lag_peso: 1` se usa el de *t-1* (el AUM que generó el rendimiento de *t*).
 - `hds9-4524` tiene huecos de fechas: si no hay valor de fondo exactamente en la fecha requerida se toma el último disponible hasta 7 días antes. Un peer sin peso en esa ventana sale del promedio ese día (ver `n_peers`).
 - Los índices (`peers_indices.csv`) acumulan los rendimientos en base 100.
 
@@ -57,6 +57,7 @@ afp-peers run            # descarga incremental + cálculo
 afp-peers run --full     # re-descarga todo el histórico
 afp-peers download       # solo descarga
 afp-peers peers          # solo recalcula con los parquet locales
+afp-peers peers --afp colfondos   # mira los peers desde otra AFP (también en `run`)
 ```
 
 La primera corrida baja todo desde `fecha_inicio`; las siguientes solo re-descargan los últimos `redescarga_dias` (por defecto 45) para recoger correcciones retroactivas de la SFC.
@@ -74,12 +75,14 @@ La primera corrida baja todo desde `fecha_inicio`; las siguientes solo re-descar
 | `valor_fondo.parquet` | Valor de fondo al cierre en $ por fecha, AFP y portafolio |
 | `valor_unidad.parquet` | Valor de unidad por fecha, AFP y portafolio |
 | `peers_diario.csv / .parquet` | `ret_foco`, `ret_peers`, `ret_industria`, `exceso_vs_peers`, `n_peers`, AUMs |
-| `peers_indices.csv` | Índices base 100 de Porvenir, peers e industria por portafolio |
+| `peers_indices.csv` | Índices base 100 de la AFP foco, peers e industria por portafolio |
 | `cobertura.csv` | Rango de fechas y # observaciones por serie en ambos datasets (control de calidad) |
 
 Revisa `cobertura.csv` tras la primera descarga: series con `vf_obs` muy inferior a `vu_obs` indican días en que esa AFP quedará fuera del promedio.
 
 ## Configuración
+
+La AFP foco ("quién eres") se elige por nombre o código en `peers.afp_foco` de `config.yaml`, con `--afp` en el CLI o con `AFP_FOCO` en `run_spyder.py`: Porvenir (3), Proteccion (2), Colfondos (10), Skandia (9). Los peers son las demás AFP. El VU base de PEERS/INDUSTRIA se guarda por foco en `data/base_vu_<AFP>.yaml`.
 
 `config.yaml`: AFP foco (`afp_foco`), rezago del peso (`lag_peso`), portafolios a excluir, fecha de inicio y versión de API.
 
